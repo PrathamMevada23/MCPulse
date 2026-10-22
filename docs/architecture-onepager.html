@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MCPulse on AWS - Architecture</title>
+<style>
+@page { size: A4 landscape; margin: 0.7cm 0.8cm 0.7cm 0.8cm; }
+body { font-family: Helvetica, sans-serif; color: #111827; }
+.header { background-color: #0b4f6c; padding: 6pt 10pt; color: #ffffff; }
+.header h1 { font-size: 14pt; margin: 0; color: #ffffff; }
+.header p { font-size: 7.4pt; margin: 2pt 0 0 0; color: #cdeaf7; }
+h2 { font-size: 9.2pt; color: #0b7285; margin: 6pt 0 3pt 0; border-bottom: 0.8pt solid #0b7285; padding-bottom: 1.5pt; }
+table { border-collapse: collapse; width: 100%; font-size: 6.6pt; }
+th { background-color: #0b4f6c; color: #ffffff; text-align: left; padding: 2.5pt 3pt; border: 0.5pt solid #0b4f6c; }
+td { padding: 2pt 3pt; border: 0.5pt solid #cbd5e1; vertical-align: top; }
+tr:nth-child(even) td { background-color: #f8fafc; }
+td.code { font-family: Courier, monospace; font-size: 6.6pt; color: #0f172a; }
+.flow { font-family: Courier, monospace; font-size: 6.4pt; background-color: #f8fafc;
+        border: 0.6pt solid #cbd5e1; padding: 4pt 6pt; line-height: 1.25; }
+.box { border: 0.8pt solid #0b7285; background-color: #ecfeff; padding: 5pt 7pt; }
+.box h3 { font-size: 8.6pt; margin: 0 0 2pt 0; color: #0b4f6c; }
+.box p { font-size: 7.2pt; margin: 1pt 0; }
+.cols { width: 100%; }
+.cols td { border: 0; padding: 0 4pt 0 0; vertical-align: top; }
+.strip { background-color: #f1f5f9; border-left: 3pt solid #0ea5e9; padding: 4pt 6pt; font-size: 6.5pt; line-height: 1.3; }
+.small { font-size: 6.5pt; color: #4b5563; }
+.pill { background-color: #dcfce7; color: #166534; padding: 1pt 4pt; font-size: 7pt; }
+.warn { background-color: #fef3c7; color: #92400e; padding: 1pt 4pt; font-size: 7pt; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>MCPulse &mdash; Architecture on Amazon Web Services</h1>
+  <p>MCP Server Monitoring &amp; Performance Analytics Platform &nbsp;|&nbsp; MCA Semester III, Cloud Computing
+     &nbsp;|&nbsp; Account 462854211377 &nbsp;|&nbsp; Region us-east-1 &nbsp;|&nbsp; Deployed 2026-10-21/22</p>
+</div>
+
+<h2>1 &nbsp; Deployment topology</h2>
+<div class="flow">
+ Browser (any network)  --HTTP 80 / HTTPS 443--&gt;  [ Amazon VPC  vpc-09e2f7d67772fdfea ]<br>
+ &nbsp;&nbsp;+------------------------------------------------------------------------------------------------+<br>
+ &nbsp;&nbsp;|  EC2  i-0059c1813dd3d1ada   t3.small / Amazon Linux 2023   54.161.184.121 (us-east-1b)        |<br>
+ &nbsp;&nbsp;|    +----------------------------------------------------------------------------+                  |<br>
+ &nbsp;&nbsp;|    |  Docker Compose:  nginx :80  (host networking)  -&gt;  Node.js/Express API :3001   |                  |<br>
+ &nbsp;&nbsp;|    |  (static React bundle + reverse proxy)         (loopback only, 10 s scheduler)  |                  |<br>
+ &nbsp;&nbsp;|    +----------------------------------------------------------------------------+                  |<br>
+ &nbsp;&nbsp;|    security group  mcpulse-web-sg  sg-085f461886a0676f7  (80/443 public, 22 one IP)        |<br>
+ &nbsp;&nbsp;+------------------------------------------------------------------------------------------------+<br>
+ &nbsp;&nbsp;                                            |  TLS 5432 (security group to security group)<br>
+ &nbsp;&nbsp;                                            v<br>
+ &nbsp;&nbsp;   RDS  mcpulse-db  PostgreSQL 16.13  db.t3.micro  20 GB gp3  Single-AZ  <b>PubliclyAccessible = false</b><br>
+ &nbsp;&nbsp;         mcpulse-db.cyinxjr3lgjz.us-east-1.rds.amazonaws.com:5432   sg  mcpulse-db-sg sg-0d74bb805b76e8e0e<br>
+ &nbsp;&nbsp;         tables: mcp_servers &middot; monitoring_checks &middot; incidents &middot; mcp_tools &middot; schema_migrations
+</div>
+
+<table class="cols"><tr>
+<td style="width: 50%">
+  <h2>2 &nbsp; Data flow</h2>
+  <div class="flow">
+<b>Monitoring cycle (every 10 s)</b><br>
+ scheduler -&gt; SELECT servers FROM RDS<br>
+ &nbsp;&nbsp;-> HTTPS POST "initialize" (JSON-RPC 2025-03-26)<br>
+ &nbsp;&nbsp;-> GitHub / Google Drive / Brave /<br>
+ &nbsp;&nbsp;&nbsp;&nbsp; Cloudflare / Hugging Face<br>
+ &nbsp;&nbsp;-> latency + status + sanitised error<br>
+ &nbsp;&nbsp;-> INSERT monitoring_checks<br>
+ &nbsp;&nbsp;-> 3 failures: INSERT incidents (open)<br>
+ &nbsp;&nbsp;-> 1 success : UPDATE incidents (resolved)<br><br>
+<b>User request</b><br>
+ browser -&gt; nginx -&gt; /api/* -&gt; Express API<br>
+ &nbsp;&nbsp;-&gt; auth key + SSRF guard<br>
+ &nbsp;&nbsp;-&gt; TLS to RDS (CA + hostname verified)<br>
+ &nbsp;&nbsp;-&gt; JSON to the dashboard<br><br>
+<b>Observability</b><br>
+ API + host -&gt; CloudWatch Logs (4 groups, 7 d)<br>
+ host -&gt; CloudWatch Metrics (CWAgent mem/disk)
+  </div>
+</td>
+<td style="width: 50%">
+  <h2>3 &nbsp; Services and why</h2>
+  <table>
+    <tr><th style="width: 27%">Service</th><th style="width: 34%">Role</th><th>Reason</th></tr>
+    <tr><td>Amazon VPC (default)</td><td>network isolation, 6 AZs</td><td>the database has no path out of the VPC</td></tr>
+    <tr><td>Amazon EC2 t3.small</td><td>nginx + API + scheduler</td><td>long running stateful service; t3.micro cannot build the images</td></tr>
+    <tr><td>Amazon RDS PostgreSQL 16</td><td>persistent store, 20 GB gp3</td><td>managed, patched, isolated, encrypted at rest</td></tr>
+    <tr><td>Security group (web)</td><td>80/443 public, 22 one IP</td><td>port 3001 deliberately not exposed</td></tr>
+    <tr><td>Security group (db)</td><td>5432 from web SG only</td><td>database reachable only from the app tier</td></tr>
+    <tr><td>CloudWatch Logs</td><td>app + host logs, 7 day retention</td><td>diagnostics with bounded cost</td></tr>
+    <tr><td>CloudWatch Metrics</td><td>mem / disk of the instance</td><td>capacity trends without SSH</td></tr>
+    <tr><td>IAM LabRole</td><td>present, not attachable</td><td>iam:PassRole denied by the lab - documented finding</td></tr>
+    <tr><td>Amazon S3</td><td>not used</td><td>CSV is produced from the database; no needless cost</td></tr>
+  </table>
+</td>
+</tr></table>
+
+<h2>4 &nbsp; Security controls (all verified) &nbsp;&nbsp;&nbsp; 5 &nbsp; Cost &nbsp;&nbsp;&nbsp; 6 &nbsp; Evidence</h2>
+<table class="cols"><tr>
+<td style="width: 72%">
+  <div class="strip">
+  <b>Database isolation</b> - PubliclyAccessible = false; security group accepts 5432 only from the web tier; RDS refuses unencrypted connections.<br>
+  <b>TLS</b> - certificate chain <i>and</i> hostname verified against the Amazon RDS CA bundle; the ssl* URL parameters are stripped so the verified configuration cannot be overridden.<br>
+  <b>Attack surface</b> - the API is published on 127.0.0.1:3001 only; nginx is the single public entry point; every state changing request needs the administrative key.<br>
+  <b>SSRF</b> - loopback, private, carrier grade NAT, link local and cloud metadata destinations are rejected before any outbound request (169.254.169.254 -> HTTP 400).<br>
+  <b>Secrets</b> - database password, SSH key and AWS credentials live outside the repository; the tree is scanned clean.
+  </div>
+</td>
+<td style="width: 28%">
+  <div class="strip">
+  EC2 t3.small &nbsp;&nbsp; $0.021 / h<br>
+  RDS db.t3.micro &nbsp; $0.017 / h<br>
+  20 GB gp3 &nbsp; $2.30 / month<br>
+  Public IPv4 &nbsp; $0.005 / h<br>
+  <b>~ $0.18 per 4 h session</b><br>
+  <span class="small">no ALB, no NAT gateway, no Multi-AZ, no S3</span>
+  </div>
+</td>
+</tr></table>
+
+<p class="small">
+  5 monitored providers &middot; 1333 recorded checks &middot; 5 incidents &middot; 4 tools discovered (hf_fs, hf_whoami, hub_repo_details, hub_repo_search) &middot; 3 applied migrations &middot;
+  18 AWS console screenshots in <b>AWS SS/</b> &middot; machine readable evidence in <b>docs/DEPLOYMENT_STATUS.md</b> &middot; reproducible with <b>scripts/aws/{audit,deploy,resume,stop,allowlist}.sh</b>.
+  <span class="pill">verified live</span> <span class="warn">known limits: no instance profile (iam:PassRole), CloudWatch log events not delivered in this account, Ubuntu AMI not visible</span>
+</p>
+
+</body>
+</html>

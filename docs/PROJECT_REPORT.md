@@ -21,7 +21,7 @@ evidence-based diagnostics report.
 
 The platform is deployed end to end on **Amazon Web Services** (EC2 for the
 application tier, RDS PostgreSQL for persistence, VPC and security groups for
-network isolation, CloudWatch for observability) and was verified with 538
+network isolation, CloudWatch for observability) and was verified with 1333
 recorded checks, live tool discovery against a public MCP server and a complete
 incident lifecycle. The deployment is reproducible through a set of idempotent
 scripts and a documented resume/stop workflow for the AWS Academy Learner Lab.
@@ -196,7 +196,7 @@ Cost: **≈ $0.18 per four-hour lab session** (EC2 $0.021/h, RDS $0.017/h,
 
 | Requirement | Verification | Result |
 |---|---|---|
-| Continuous availability and latency monitoring | 538 rows in `monitoring_checks`, written every provider interval | ✅ |
+| Continuous availability and latency monitoring | 1333 rows in `monitoring_checks`, written every provider interval | ✅ |
 | Relational persistence and migration history | 3 migrations applied; `schema_migrations` records them | ✅ |
 | Outage detection and incident lifecycle | 3 consecutive failures → `Down` + open incident; recovery → `Healthy` + auto-resolve | ✅ |
 | Tool discovery | 4 live tools from the Hugging Face MCP server (`hf_fs`, `hf_whoami`, `hub_repo_details`, `hub_repo_search`) | ✅ |

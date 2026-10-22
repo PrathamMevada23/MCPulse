@@ -5,6 +5,7 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+!docs/submission/
 
 # local configuration and secrets - never commit these
 .env
