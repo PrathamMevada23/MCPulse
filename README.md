@@ -1,6 +1,6 @@
 # MCPulse
 
-MCPulse is a Cloud Computing course project for monitoring remotely reachable MCP servers. It records availability and response-time checks, presents historical status, and manages incidents. This repository currently contains the Phase 1 local foundation only.
+MCPulse is a Cloud Computing project for monitoring remotely reachable MCP servers. It records availability and response-time checks, presents historical status, and manages incidents. This repository currently contains the Phase 1 local foundation only.
 
 ## Current scope
 
