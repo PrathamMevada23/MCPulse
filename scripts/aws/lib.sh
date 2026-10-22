@@ -27,6 +27,16 @@ set -euo pipefail
 : "${APP_DIR:=/home/ubuntu/mcpulse}"
 : "${STATE_FILE:=${HOME}/.mcpulse/aws-lab-state.env}"
 
+# The Learner Lab credentials are temporary and the profile is occasionally
+# rewritten by "aws configure", which drops the named profile. Fall back to the
+# default profile when the configured one is no longer present.
+if [ ! -f "$HOME/.aws/credentials" ] || ! grep -q "^\[$AWS_PROFILE\]" "$HOME/.aws/credentials" 2>/dev/null; then
+  if [ -f "$HOME/.aws/credentials" ] && grep -q "^\[default\]" "$HOME/.aws/credentials" 2>/dev/null; then
+    warn "Profile '$AWS_PROFILE' is missing from ~/.aws/credentials, using the default profile."
+    AWS_PROFILE=default
+  fi
+fi
+
 export AWS_PROFILE AWS_REGION
 
 # ------------------------------------------------------------------- utilities
