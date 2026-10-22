@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+coverage/
+*.tsbuildinfo
+
+# local configuration and secrets - never commit these
+.env
+.env.*
+!.env.example
+certs/
+
+# AWS lab state and secrets live outside the repository
+.mcpulse/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log

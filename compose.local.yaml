@@ -1,0 +1,24 @@
+# Local verification override.
+#
+# The production file (compose.aws.yaml) runs nginx with host networking so the
+# real client address reaches nginx and the administrator allowlist works.
+#
+# Docker Desktop on macOS cannot publish a host-network port to the host, so
+# this override switches back to bridge networking for local smoke tests only.
+# In this mode every request appears to come from the Docker gateway address
+# (192.168.65.1 on Docker Desktop), which must be allowlisted for the
+# administrative routes to work.
+#
+#   docker compose -f compose.aws.yaml -f compose.local.yaml up -d
+
+services:
+  web:
+    # `!reset` removes the host networking mode of the production file so the
+    # container joins the compose network again (and the "api" service name
+    # resolves).
+    network_mode: !reset null
+    ports:
+      - "80:80"
+    environment:
+      # In bridge networking the API is reached through the compose service name.
+      - MCPULSE_API_UPSTREAM=api:3001

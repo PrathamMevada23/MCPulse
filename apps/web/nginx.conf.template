@@ -1,0 +1,67 @@
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Operational logging goes to the container stdout so the CloudWatch agent
+    # can ship it with the application logs.
+    access_log /dev/stdout;
+    error_log /dev/stderr warn;
+
+    # Upstream API address. In production nginx runs with host networking, so
+    # the API is reached on the host loopback address where it is published.
+    # Local bridge networking uses the compose service name instead.
+
+    client_max_body_size 1m;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Single page application.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API access.
+    #
+    # Read-only operations (dashboard summary, check history, tool inventory,
+    # AI diagnostics, CSV export) are available to every visitor.
+    #
+    # State changing operations (register a server, run a manual check,
+    # discover tools, test a tool, delete a server) are authorized by the API
+    # itself with the administrative key in the X-MCPulse-Admin-Key header.
+    # An address allowlist is not used here: the address of a campus or
+    # corporate network changes regularly, which would either lock the
+    # operator out or force a wide open range.
+    location /api/ {
+        proxy_pass http://${MCPULSE_API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 60s;
+        proxy_connect_timeout 10s;
+    }
+
+    location /health {
+        proxy_pass http://${MCPULSE_API_UPSTREAM}/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    location = /health/ready {
+        proxy_pass http://${MCPULSE_API_UPSTREAM}/health/ready;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+}

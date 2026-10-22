@@ -1,0 +1,67 @@
+@import 'tailwindcss';
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html.light-theme {
+    color-scheme: light;
+  }
+}
+
+/* Off-white theme overrides for clean shadcn appearance */
+html.light-theme .bg-zinc-950 {
+  background-color: #fafafa !important;
+}
+
+html.light-theme .bg-zinc-900,
+html.light-theme .bg-zinc-900\/40,
+html.light-theme .bg-zinc-900\/50,
+html.light-theme .bg-zinc-900\/80 {
+  background-color: #ffffff !important;
+}
+
+html.light-theme .border-zinc-800,
+html.light-theme .border-zinc-800\/60,
+html.light-theme .border-zinc-800\/80 {
+  border-color: #e4e4e7 !important;
+}
+
+html.light-theme .text-zinc-100,
+html.light-theme .text-zinc-200 {
+  color: #18181b !important;
+}
+
+html.light-theme .text-zinc-300,
+html.light-theme .text-zinc-400 {
+  color: #52525b !important;
+}
+
+html.light-theme .text-zinc-500 {
+  color: #71717a !important;
+}
+
+html.light-theme .divide-zinc-800\/60 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #f4f4f5 !important;
+}
+
+html.light-theme .bg-zinc-800\/60 {
+  background-color: #f4f4f5 !important;
+}
+
+html.light-theme .hover\:bg-zinc-900\/60:hover {
+  background-color: #f4f4f5 !important;
+}
+
+html.light-theme input,
+html.light-theme select {
+  background-color: #ffffff !important;
+  border-color: #e4e4e7 !important;
+  color: #18181b !important;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}

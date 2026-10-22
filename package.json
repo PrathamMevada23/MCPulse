@@ -1,0 +1,27 @@
+{
+  "name": "mcpulse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP Server Monitoring and Performance Analytics Platform",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev --workspace=@mcpulse/api\" \"npm run dev --workspace=@mcpulse/web\"",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspace=@mcpulse/api",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run db:migrate --workspace=@mcpulse/api",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.25.0",
+    "prettier": "^3.5.3",
+    "typescript-eslint": "^8.30.1"
+  }
+}

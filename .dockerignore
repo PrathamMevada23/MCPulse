@@ -1,0 +1,21 @@
+# Build context hygiene: keep the image builds fast and prevent local
+# artefacts (including the local .env with development credentials) from being
+# sent to the Docker daemon or baked into an image.
+node_modules
+**/node_modules
+dist
+**/dist
+coverage
+**/coverage
+*.tsbuildinfo
+
+.git
+.gitignore
+.DS_Store
+
+.env
+.env.*
+!.env.example
+
+docs
+*.md

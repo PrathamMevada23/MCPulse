@@ -1,0 +1,139 @@
+name: mcpulse-aws
+
+# Production compose configuration for Amazon EC2.
+#
+# Secrets are never stored in this file. The values are read from the `.env`
+# file that sits next to this compose file (mode 600, created on the instance
+# by the deployment script and never committed).
+#
+# The database is a PostgreSQL 16 container that is only reachable over the
+# private compose network: no port is published to the host. It is used when
+# the deployment target does not allow an Amazon RDS instance. When the
+# environment provides RDS, set DATABASE_URL to the RDS endpoint and start only
+# the api and web services with `--no-deps`.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mcpulse}
+      POSTGRES_USER: ${POSTGRES_USER:-mcpulse}
+      # Only used in the containerised database mode.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-not-used-with-rds}
+    # TLS with a locally generated certificate authority. The API verifies the
+    # server certificate against the same authority, so the connection is
+    # encrypted and authenticated.
+    #
+    # The key is copied into a volume and given container side ownership
+    # because PostgreSQL refuses a private key that is group or world readable
+    # or that is not owned by the database user.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        cp /certs-in/server.key /etc/pg-ssl/server.key
+        cp /certs-in/server.crt /etc/pg-ssl/server.crt
+        cp /certs-in/ca.crt /etc/pg-ssl/ca.crt
+        chown postgres:postgres /etc/pg-ssl/server.key /etc/pg-ssl/server.crt /etc/pg-ssl/ca.crt
+        chmod 600 /etc/pg-ssl/server.key
+        chmod 644 /etc/pg-ssl/server.crt /etc/pg-ssl/ca.crt
+        exec docker-entrypoint.sh postgres \
+          -c ssl=on \
+          -c ssl_cert_file=/etc/pg-ssl/server.crt \
+          -c ssl_key_file=/etc/pg-ssl/server.key \
+          -c ssl_ca_file=/etc/pg-ssl/ca.crt
+    volumes:
+      - mcpulse_pgdata:/var/lib/postgresql/data
+      - mcpulse_pgssl:/etc/pg-ssl
+      - ./certs/pg:/certs-in:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mcpulse} -d ${POSTGRES_DB:-mcpulse}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    # No published port: the database is only reachable from the api service
+    # over the private compose network.
+
+  api:
+    build:
+      # npm workspace: the lockfile lives at the repository root.
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost}
+      - DATABASE_URL=${DATABASE_URL}
+      - CHECK_TIMEOUT_MS=${CHECK_TIMEOUT_MS:-10000}
+      - INCIDENT_FAILURE_THRESHOLD=${INCIDENT_FAILURE_THRESHOLD:-3}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - RDS_CA_BUNDLE_PATH=${RDS_CA_BUNDLE_PATH:-/etc/ssl/certs/mcpulse/rds-ca-global-bundle.pem}
+      - DATABASE_TLS_CA_PATH=${DATABASE_TLS_CA_PATH:-}
+    volumes:
+      # Certificate authority used to verify the database certificate.
+      - ./certs:/etc/ssl/certs/mcpulse:ro
+    ports:
+      # Bound to loopback: nginx is the only public entry point.
+      - "127.0.0.1:3001:3001"
+    # Container logs are shipped directly to CloudWatch Logs. The CloudWatch
+    # agent file plugin only follows one file per wildcard, so the driver is
+    # the reliable option for container output.
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: "/mcpulse/app/api"
+        awslogs-region: "${AWS_REGION:-us-east-1}"
+        awslogs-create-group: "true"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Lets the dashboard authorize its write operations without the
+        # operator having to paste a key into the browser.
+        VITE_ADMIN_KEY: ${VITE_ADMIN_KEY:-}
+    restart: unless-stopped
+    # Host networking keeps the real client address visible to nginx. With the
+    # default bridge networking the published port rewrites the source address
+    # to the Docker gateway, which would silently defeat the administrator
+    # allowlist below.
+    network_mode: host
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: "/mcpulse/app/web"
+        awslogs-region: "${AWS_REGION:-us-east-1}"
+        awslogs-create-group: "true"
+    environment:
+      # Address allowed to perform state changing API operations.
+      - MCPULSE_ADMIN_IP=${MCPULSE_ADMIN_IP:-127.0.0.1}
+      # The API is published on the host loopback address, which is where the
+      # host networked nginx reaches it.
+      - MCPULSE_API_UPSTREAM=127.0.0.1:3001
+      # Only substitute MCPULSE_* variables so nginx runtime variables are kept.
+      - NGINX_ENVSUBST_FILTER=^MCPULSE_
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  mcpulse_pgdata:
+  mcpulse_pgssl:
